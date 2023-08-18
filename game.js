@@ -3,7 +3,7 @@ window.onload = function() {
 	// var innerHeight = window.innerHeight;
 	// var gameRatio = innerWidth/innerHeight;	
 	// var game = new Phaser.Game(Math.floor(480*gameRatio), 480, Phaser.CANVAS);	
-	var game = new Phaser.Game(800, 480, Phaser.CANVAS);	
+	var game = new Phaser.Game(1000, 600, Phaser.CANVAS);	
 	var ninja;
 	var bg;
 	var ninjaGravity = 800;
@@ -16,24 +16,45 @@ window.onload = function() {
      var powerTween;
      var placedPoles;
 	var poleGroup; 
-     var minPoleGap = 100;
+     var minPoleGap = 110;
      var maxPoleGap = 250; 
      var ninjaJumping;
-     var ninjaFallingDown;     
+     var ninjaFallingDown;   
+	 var gameOverImage;
+	var jumpButton;
+	
+	 var backgroundMusic;
+	 var jumpSFX;
+	 var dieSFX;
+	 var punchSFX;
      var play = function(game){}     
      play.prototype = {
 		preload:function(){
             // game.scale.scaleMode = Phaser.ScaleManager.SHOW_ALL;
 			// game.scale.setScreenSize(true);
-			game.load.image("ninja", "assets/kitty.png"); 
-			game.load.spritesheet('dude', 'assets/dude.png', { frameWidth: 32, frameHeight: 48 });
-			game.load.image("pole", "assets/ground.png");
-            game.load.image("powerbar", "assets/powerbar.png");
-            game.load.image("bg", "assets/background.png");
+			game.load.image("ninja-idle", "assets/image/kitty-idle.png"); 
+			game.load.image("ninja-jump", "assets/image/kitty-jump.png"); 
+			game.load.image("ninja-die", "assets/image/kitty-die.png"); 
+			game.load.image("pole", "assets/image/ground.png");
+            game.load.image("powerbar", "assets/image/powerbar.png");
+            game.load.image("bg", "assets/image/background2.png");
+            game.load.image("gameOverImage", "assets/image/gameOver.png");
+
+			game.load.audio("bgmusic", "assets/audio/bgmusic.mp3");
+			game.load.audio("jumpSFX", "assets/audio/jump.mp3");
+			game.load.audio("dieSFX", "assets/audio/die.mp3");
+			game.load.audio("punchSFX", "assets/audio/punch.mp3");
 		},
 		create:function(){
+			game.scale.pageAlignVertically = true;
+			game.scale.pageAlignHorizontally = true;
 			bg = this.add.image(0,0, "bg")
-			bg.scale = 0.5;
+			backgroundMusic = game.add.audio("bgmusic")
+			jumpSFX = game.add.audio("jumpSFX")
+			dieSFX = game.add.audio("dieSFX")
+			punchSFX = game.add.audio("punchSFX")
+			backgroundMusic.loop = true;
+			backgroundMusic.play()
 			ninjaJumping = false;
 			ninjaFallingDown = false;
 			score = 0;
@@ -43,25 +64,29 @@ window.onload = function() {
 			scoreText = game.add.text(10,10,"-",{
 				font:"bold 16px Arial"
 			});
-			comboText = game.add.text(400,100,"",{
+			comboText = game.add.text(5,100,"",{
 				font:"bold 16px Arial"
 			});
+
 			updateScore();
-			// game.stage.backgroundColor = "#87CEEB";
+			game.stage.backgroundColor = "#87CEEB";
 			game.physics.startSystem(Phaser.Physics.ARCADE);
-			// ninja = game.add.sprite(80,0,"ninja");
-			ninja = game.add.sprite(120,0,"ninja");
+			ninja = game.add.sprite(150,0,"ninja-idle");
 			ninja.anchor.set(0.5);
 			ninja.lastPole = 1;
 			game.physics.arcade.enable(ninja);              
 			ninja.body.gravity.y = ninjaGravity;
 			game.input.onDown.add(prepareToJump, this);
-			addPole(120);
+			addPole(150);
+			jumpButton = game.input.keyboard.addKey(Phaser.Keyboard.SPACEBAR);
 			
 		},
 		update:function(){
 			game.physics.arcade.collide(ninja, poleGroup, checkLanding);
-			if(ninja.y>game.height){
+			if(ninja.y>game.height && ninja.y < 610){
+				die();
+			}
+			else if(ninja.y>game.height && ninja.y < 630){
 				die();
 			}
 		}
@@ -70,15 +95,22 @@ window.onload = function() {
 		game.state.start("Play");
         
 	function updateScore(){
-		scoreText.text = "Score: "+score+"\nBest: "+topScore;	
+		if(score > topScore){
+			scoreText.text = "Score: "+score+"\nBest: "+score;
+		} else{
+			scoreText.text = "Score: "+score+"\nBest: "+topScore;	
+		}
 	}     
 	function prepareToJump(){
+
+		comboText.destroy();
 		if(ninja.body.velocity.y==0){
 	          powerBar = game.add.sprite(ninja.x,ninja.y-50,"powerbar");
 	          powerBar.width = 0;
 	          powerTween = game.add.tween(powerBar).to({
 			   width:100
 			}, 1000, "Linear",true); 
+
 	          game.input.onDown.remove(prepareToJump, this);
 	          game.input.onUp.add(jump, this);
           }        	
@@ -88,9 +120,11 @@ window.onload = function() {
           powerBar.destroy();
           game.tweens.removeAll();
           ninja.body.velocity.y = ninjaJumpPower*2;
+		  ninja.loadTexture('ninja-jump');
           ninjaJumping = true;
           powerTween.stop();
           game.input.onUp.remove(jump, this);
+		  jumpSFX.play()
      }     
      function addNewPoles(){
      	var maxPoleX = 0;
@@ -103,7 +137,7 @@ window.onload = function() {
 	function addPole(poleX){
 		if(poleX<game.width*2){
 			placedPoles++;
-			var pole = new Pole(game,poleX,game.rnd.between(250,380));
+			var pole = new Pole(game,poleX,game.rnd.between(350,480));
 			game.add.existing(pole);
 	          pole.anchor.set(0.5,0);
 			poleGroup.add(pole);
@@ -113,21 +147,40 @@ window.onload = function() {
 	}	
 	function die(){
 		localStorage.setItem("KittyTopScore",Math.max(score,topScore));	
+		backgroundMusic.stop()
+		dieSFX.play()
+		ninja.body.velocity.x = 1500;
+		gameOverImage = game.add.sprite(game.world.centerX, game.world.centerY, 'gameOverImage');
+    	gameOverImage.anchor.set(0.5);
+    	gameOverImage.inputEnabled = true;
+		gameOverImage.width = 300;
+		gameOverImage.height = 350;
+		gameOverImage.events.onInputDown.add(playAgain, this);			
+	}
+	function playAgain(){
 		game.state.start("Play");
 	}
 	function checkLanding(n,p){
 		if(p.y>=n.y+n.height/2){
 			var border = n.x-p.x
 			if(Math.abs(border)>40){
+				punchSFX.play()
 				n.body.velocity.x=border*1;
 				n.body.velocity.y=-200;	
+				ninja.loadTexture('ninja-die');
 			}
+			ninja.loadTexture('ninja-idle');
 			var poleDiff = p.poleNumber-n.lastPole;
 			if(poleDiff>0){
+				jumpSFX.stop()
 				if(poleDiff > 2){
 					score+= 2*poleDiff;
-					comboText.text = "combo \n"+ poleDiff + " x 2"
+					comboText = game.add.text(ninja.x-35,ninja.y-100,"COMBO\n" + poleDiff + " x 2",{
+						font:"bold 16px Arial",
+						align: 'center'
+					});
 				}
+				
 				else{
 					score+= 1*poleDiff;
 					comboText.text = ""
@@ -142,8 +195,10 @@ window.onload = function() {
 		}
 		else{
 			ninjaFallingDown = true;
+			punchSFX.play()
 			poleGroup.forEach(function(item) {
-				item.body.velocity.x = 0;			
+				item.body.velocity.x = 0;		
+				ninja.loadTexture('ninja-die');	
 			});
 		}			
 	}
